@@ -146,6 +146,20 @@ public class ColibriConferenceImpl
     private String gid;
 
     /**
+     * The list of Octo relay IDs.
+     */
+    private List<String> octoRelays;
+
+    private ColibriConferenceIQ octoChannels;
+
+    /**
+     * Used to synchronize access to {@link #octoChannels}, {@link #octoRelays}
+     * and other octo-related fields (to be added).
+     */
+    private final Object octoSyncRoot = new Object();
+
+
+    /**
      * Creates new instance of <tt>ColibriConferenceImpl</tt>.
      * @param connection XMPP connection object that wil be used by the new
      *        instance to communicate.
@@ -157,6 +171,7 @@ public class ColibriConferenceImpl
     {
         this.connection = Objects.requireNonNull(connection, "connection");
         this.eventAdmin = Objects.requireNonNull(eventAdmin, "eventAdmin");
+        colibriBuilder.setRTPLevelRelayType(RTPLevelRelayType.MIXER);
     }
 
     /**
@@ -240,6 +255,156 @@ public class ColibriConferenceImpl
             colibriBuilder.setAudioPacketDelay(config.getAudioPacketDelay());
         }
     }
+
+    public boolean createColibriOctoChannels(List<String> relayIds)
+        throws OperationFailedException
+    {
+        synchronized (octoSyncRoot)
+        {
+            List<ContentPacketExtension> octoContents = new LinkedList<>();
+            for (String mediaType : new String[]{"audio", "video"})
+            {
+                octoContents.add(
+                    new ContentPacketExtension(
+                        ContentPacketExtension.CreatorEnum.initiator,
+                        mediaType.toLowerCase()));
+            }
+            String s = "";
+            for (String r : relayIds)
+                s+=" "+r+" ";
+            System.err.println("XXX createOctoChannels relays="+s);
+            ColibriConferenceIQ allocateRequest;
+            try
+            {
+                synchronized (syncRoot)
+                {
+                    // Only if not in 'disposed' state
+                    if (checkIfDisposed("createColibriOctoChannels"))
+                    {
+                        return false;
+                    }
+
+                    colibriBuilder.reset();
+
+                    colibriBuilder.addAllocateOctoChannelsReq(
+                        octoContents,
+                        relayIds);
+
+                    allocateRequest = colibriBuilder
+                        .getRequest(jitsiVideobridge);
+                }
+
+                logRequest("Octo channel allocate request", allocateRequest);
+
+                // FIXME retry allocation on timeout ?
+                Packet response = sendAllocRequest("octo", allocateRequest);
+
+                logResponse("Octo channel allocate response", response);
+
+
+                // Verify the response and throw OperationFailedException
+                // if it's not a success
+                maybeThrowOperationFailed(response);
+
+                // Update the complete ColibriConferenceIQ representation maintained by
+
+                // this instance with the information given by the (current)
+                // response.
+                // FIXME: allocations!!! should be static method
+                synchronized (syncRoot)
+                {
+                    ColibriAnalyser analyser = new ColibriAnalyser(
+                        conferenceState);
+
+                    analyser.processChannelAllocResp(
+                        (ColibriConferenceIQ) response);
+                }
+
+                // Octo channels were allocated. Set our state.
+                octoChannels = ColibriAnalyser.getResponseContents(
+                    (ColibriConferenceIQ) response, octoContents);
+
+                // TODO: read the relays from the response to make sure they were
+                // correctly set.
+                octoRelays = relayIds;
+
+                System.err.println("XXX octo channels created");
+            }
+            catch (Exception e)
+            {
+                synchronized (syncRoot)
+                {
+                    // Emit channels expired
+                    checkIfDisposed("octo post channels expired on Exception");
+                }
+                throw e;
+            }
+            finally
+            {
+                releaseCreateConferenceSemaphore("octo");
+            }
+        }
+        return true;
+    }
+
+    // we might not necessarily need this
+    public List<String> getOctoRelays()
+    {
+        synchronized (octoSyncRoot)
+        {
+            return new LinkedList<>(octoRelays);
+        }
+    }
+
+    public void setOctoRelays(List<String> relays)
+    {
+        synchronized (octoSyncRoot)
+        {
+            if (relays == null)
+            {
+                // expire octo channels
+            }
+            else if (octoChannels == null)
+            {
+                try
+                {
+                    createColibriOctoChannels(relays);
+                }
+                catch (OperationFailedException ofe)
+                {
+
+                }
+            }
+            else
+            {
+                // TODO: check if there are changes
+                octoRelays = relays;
+                // send update...
+            }
+        }
+    }
+
+    /*
+    public void addOctoSources()
+    {
+        // update local state, send an update request.
+    }
+    public void removeOctoSources()
+    {
+        // update local state, send an update request.
+    }
+    private void updateOctoSourcesInfo(MediaSSRCMap ssrcs,
+                                  MediaSSRCGroupMap ssrcGroups,
+                                  ColibriConferenceIQ localChannelsInfo)
+    {
+        // construct and send a request with the local state
+    }
+
+    public void updateOctoRelays()
+    {
+        // update local state, if changed -> send an update request
+    }
+    */
 
     /**
      * {@inheritDoc}

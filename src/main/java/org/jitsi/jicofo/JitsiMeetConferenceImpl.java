@@ -23,6 +23,7 @@ import net.java.sip.communicator.service.protocol.*;
 import net.java.sip.communicator.service.protocol.event.*;
 import net.java.sip.communicator.util.*;
 
+import org.jitsi.impl.protocol.xmpp.colibri.*;
 import org.jitsi.impl.protocol.xmpp.extensions.*;
 import org.jitsi.jicofo.event.*;
 import org.jitsi.jicofo.recording.jibri.*;
@@ -539,7 +540,7 @@ public class JitsiMeetConferenceImpl
      * Creates a new {@link ColibriConference} instance for use by this
      * {@link JitsiMeetConferenceImpl}.
      */
-    private ColibriConference createNewColibriConference(String bridgeJid)
+    private ColibriConferenceImpl createNewColibriConference(String bridgeJid)
     {
         ColibriConference colibriConference = colibri.createNewConference();
         colibriConference.setGID(id);
@@ -550,7 +551,7 @@ public class JitsiMeetConferenceImpl
         colibriConference.setName(roomName);
         colibriConference.setJitsiVideobridge(bridgeJid);
 
-        return colibriConference;
+        return (ColibriConferenceImpl) colibriConference;
     }
 
     /**
@@ -649,6 +650,12 @@ public class JitsiMeetConferenceImpl
                 bridges.add(bridgeSession);
                 // TODO: if the number of bridges changes 1->2 or 2->1, then
                 // we need to enable/disable relaying.
+
+                if (bridges.size() > 1)
+                {
+                    System.err.println("XXX enable multi bridge");
+                    enableMultiBridge();
+                }
             }
 
             bridgeSession.participants.add(participant);
@@ -671,6 +678,31 @@ public class JitsiMeetConferenceImpl
         }
 
         return bridgeSession;
+    }
+
+    private void enableMultiBridge()
+    {
+        synchronized (bridges)
+        {
+            Set<String> allRelays = new HashSet<>();
+            for (BridgeSession bridge : bridges)
+            {
+                String relay = bridge.bridgeState.getRelayId();
+                if (relay != null)
+                    allRelays.add(relay);
+                else
+                    logger.warn("XXX not adding null relay. Fucking signaling fail. :/");
+            }
+
+            String s = "XXX all relays:";
+            for (String r : allRelays)
+                s+=" "+r+" ";
+            System.err.println(s);
+            for (BridgeSession bridge : bridges)
+            {
+                bridge.enableOkto(allRelays);
+            }
+        }
     }
 
     /**
@@ -2153,7 +2185,9 @@ public class JitsiMeetConferenceImpl
          * The {@link ColibriConference} instance used to communicate with
          * the jitsi-videobridge represented by this {@link BridgeSession}.
          */
-        final ColibriConference colibriConference;
+        final ColibriConferenceImpl colibriConference;
+
+        private ColibriConferenceIQ oktoChannels;
 
         /**
          * Indicates if the bridge used in this conference is faulty. We use
@@ -2248,6 +2282,19 @@ public class JitsiMeetConferenceImpl
             }
 
             return removed;
+        }
+
+        private void enableOkto(Set<String> allRelays)
+        {
+            List<String> relays = new LinkedList<>(allRelays);
+            relays.remove(bridgeState.getRelayId());
+
+            String s = "";
+            for (String r : relays)
+                s += " "+r+" ";
+            System.err.println("XXX enable octo on "+bridgeState.getJid()+"; relays="+s);
+            // TODO spin another thread?
+            colibriConference.setOctoRelays(relays);
         }
     }
 }

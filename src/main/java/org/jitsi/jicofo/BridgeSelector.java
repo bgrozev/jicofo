@@ -322,6 +322,10 @@ public class BridgeSelector
     synchronized public BridgeState selectVideobridge(
             JitsiMeetConference conference, Participant participant)
     {
+        // TODO: take into account that not all bridges may support or have
+        // configured an Octo Relay. Something like:
+        //if (the conference already has a bridge and no relay_id) -- use the same bridge
+        //else if (selecting a new bridge) only select bridges with relay_id != null
         List<BridgeState> bridges = getPrioritizedBridgesList();
         return bridgeSelectionStrategy.select(bridges, conference, participant);
     }
@@ -753,7 +757,10 @@ public class BridgeSelector
                         : conference.getBridges();
             if (conferenceBridges.isEmpty())
             {
-                return selectInitial(bridges, conference, participant);
+                BridgeState b= selectInitial(bridges, conference, participant);
+                if (b != null)
+                    logger.warn("XXX selected initial bridge"+b.getJid()+" with relay: " + b.getRelayId());
+                return b;
             }
             else
             {
@@ -837,6 +844,7 @@ public class BridgeSelector
     private static class SingleBridgeSelectionStrategy
         extends BridgeSelectionStrategy
     {
+        SingleBridgeSelectionStrategy(){}
         /**
          * {@inheritDoc}
          * </p>
@@ -868,6 +876,41 @@ public class BridgeSelector
             }
 
             return bridgeState;
+        }
+    }
+
+    private static class SplitBridgeSelectionStrategy
+        extends BridgeSelectionStrategy
+    {
+        SplitBridgeSelectionStrategy(){}
+        /**
+         * {@inheritDoc}
+         * </p>
+         * Always selects the bridge already used by the conference.
+         */
+        @Override
+        public BridgeState doSelect(
+            List<BridgeState> bridges,
+            List<BridgeState> conferenceBridges,
+            JitsiMeetConference conference,
+            Participant participant)
+        {
+            for (BridgeState bridgeState : bridges)
+            {
+                if (!conferenceBridges.contains(bridgeState))
+                {
+                    System.err.println("XXX selecting a new bridge for " + conference.getRoomName()+" jvb="+bridgeState.getJid()+" relay="+bridgeState.getRelayId());
+                    return bridgeState;
+                }
+            }
+            if (!bridges.isEmpty())
+            {
+                BridgeState b= bridges.get(new Random().nextInt() % bridges.size());
+                System.err.println("XXX random existing bridge for " + conference.getRoomName()+" jvb="+b.getJid());
+                return b;
+            }
+
+            return null;
         }
     }
 }
