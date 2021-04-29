@@ -31,6 +31,7 @@ import org.jitsi.xmpp.extensions.jingle.JingleIQProvider
 import org.jitsi.xmpp.extensions.jitsimeet.BridgeSessionPacketExtension
 import org.jitsi.xmpp.extensions.jitsimeet.ConferenceIqProvider
 import org.jitsi.xmpp.extensions.jitsimeet.IceStatePacketExtension
+import org.jitsi.xmpp.extensions.jitsimeet.JsonMessageExtension
 import org.jitsi.xmpp.extensions.jitsimeet.LoginUrlIqProvider
 import org.jitsi.xmpp.extensions.jitsimeet.LogoutIqProvider
 import org.jitsi.xmpp.extensions.jitsimeet.RegionPacketExtension
@@ -118,5 +119,10 @@ fun registerXmppExtensions() {
         JingleIQ.ELEMENT_NAME,
         JingleIQ.NAMESPACE,
         JingleIQProvider()
+    )
+    ProviderManager.addExtensionProvider(
+        JsonMessageExtension.ELEMENT_NAME,
+        JsonMessageExtension.NAMESPACE,
+        DefaultPacketExtensionProvider(JsonMessageExtension::class.java)
     )
 }
