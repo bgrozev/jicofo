@@ -914,11 +914,25 @@ public class JitsiMeetConferenceImpl
                     .count();
             visitorCount.setValue(newVisitorCount);
         }
+        stopIfNoBreakoutRoomsExist();
+    }
 
+    private void stopIfNoBreakoutRoomsExist()
+    {
         if (chatRoom == null || chatRoom.getMemberCount() == 0)
         {
-            stop();
+            if (jicofoServices.getFocusManager().hasBreakoutRooms(roomName))
+            {
+                logger.info("Breakout rooms still present, will not stop.");
+                TaskPools.getScheduledPool().schedule(this::stopIfNoBreakoutRoomsExist, 10, TimeUnit.SECONDS);
+            }
+            else
+            {
+                logger.info("Breakout rooms not present, stopping.");
+                stop();
+            }
         }
+
     }
 
     private void terminateParticipant(

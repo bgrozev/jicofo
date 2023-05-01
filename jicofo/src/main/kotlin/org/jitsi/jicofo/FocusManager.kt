@@ -31,6 +31,7 @@ import org.jitsi.utils.stats.ConferenceSizeBuckets
 import org.json.simple.JSONArray
 import org.json.simple.JSONObject
 import org.jxmpp.jid.EntityBareJid
+import org.jxmpp.jid.impl.JidCreate
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -82,6 +83,10 @@ class FocusManager(
     }
 
     fun stop() = expireThread.stop()
+
+    fun hasBreakoutRooms(jid: EntityBareJid) = conferences.values.any {
+            it.chatRoom?.isBreakoutRoom == true && JidCreate.entityBareFrom(it.chatRoom?.mainRoom) == jid
+        }
 
     /**
      * @return <tt>true</tt> if conference focus is in the room and ready to handle session participants.
